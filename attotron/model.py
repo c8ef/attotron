@@ -107,7 +107,7 @@ class DecoderLayer(nn.Module):
         self.attention = Attention(config)
         self.mlp = MLP(config)
 
-        head_dim = config.hidden_size // config.num_attentions_heads
+        head_dim = config.hidden_size // config.num_attention_heads
         self.cos, self.sin = get_cos_sin(
             config.max_position_embeddings, head_dim=head_dim
         )
@@ -137,9 +137,9 @@ class Llama(nn.Module):
 
         # modules
         self.embedding = nn.Embedding(self.vocab_size, self.hidden_size)
-        self.decoder_layers = nn.ModuleList(
-            [DecoderLayer(config)] for _ in range(self.num_layers)
-        )
+        self.decoder_layers = nn.ModuleList([
+            DecoderLayer(config) for _ in range(self.num_layers)
+        ])
         self.final_norm = FlashRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.final_proj = nn.Linear(self.hidden_size, self.vocab_size, bias=False)
 
