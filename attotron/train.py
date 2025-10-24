@@ -1,5 +1,5 @@
 """
-torchrun --nproc_per_node 1 train.py
+torchrun --nproc_per_node 1 -m attotron.train
 """
 
 import argparse
