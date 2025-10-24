@@ -79,7 +79,7 @@ if __name__ == "__main__":
     optimizer = AdamW(model.parameters(), lr=args.learning_rate)
     dist.barrier()
 
-    # Create dummy date
+    # Create dummy data
     input_ids = torch.randint(
         0, model_config.vocab_size, (args.micro_batch_size, args.seq_len), device=device
     )
