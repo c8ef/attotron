@@ -77,7 +77,7 @@ if __name__ == "__main__":
     if is_log_rank and args.use_wandb:
         wandb.init(
             project="attotron",
-            name=f"{args.run_name}-{pgm}",
+            name=f"{args.run_name}-{pgm.pgm}",
             config={
                 "model": args.model_name,
                 "seed": args.seed,
