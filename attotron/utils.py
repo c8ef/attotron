@@ -26,7 +26,7 @@ def set_all_seed(seed):
 
 
 def readable(num, precision=3):
-    num_str = str(num)
+    num_str = str(round(num))
     length = len(num_str)
 
     def format_with_precision(main, decimal, suffix):
