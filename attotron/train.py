@@ -1,5 +1,5 @@
 """
-torchrun --nproc_per_node 2 -m attotron.train --run_name pgm --use_wandb
+torchrun --nproc_per_node 2 -m attotron.train --tp_size 2 --run_name pgm --use_wandb
 """
 
 import argparse
@@ -9,12 +9,13 @@ import os
 import torch
 import torch.distributed as dist
 import torch.nn.functional as F
-import trackio as wandb
+import wandb
 from torch.optim import AdamW
 from transformers import AutoConfig
 
+from . import pgm
 from .model import Llama
-from .pgm import pgm, setup_pgm
+from .pgm import setup_pgm
 from .utils import print, set_all_seed
 
 if __name__ == "__main__":
@@ -72,7 +73,7 @@ if __name__ == "__main__":
     setup_pgm(args.dp_size, args.tp_size, args.pp_size)
     set_all_seed(args.seed)
 
-    is_log_rank = pgm.global_rank == 0
+    is_log_rank = pgm.pgm.global_rank == 0
     if is_log_rank and args.use_wandb:
         wandb.init(
             project="attotron",
@@ -81,9 +82,9 @@ if __name__ == "__main__":
                 "model": args.model_name,
                 "seed": args.seed,
                 "learning_rate": args.learning_rate,
-                "data_parallel_size": pgm.dp_world_size,
-                "tensor_parallel_size": pgm.tp_world_size,
-                "pipeline_parallel_size": pgm.pp_world_size,
+                "data_parallel_size": pgm.pgm.dp_world_size,
+                "tensor_parallel_size": pgm.pgm.tp_world_size,
+                "pipeline_parallel_size": pgm.pgm.pp_world_size,
             },
         )
 
@@ -126,7 +127,7 @@ if __name__ == "__main__":
     # Optimizer step
     optimizer.step()
 
-    print(f"[rank {pgm.global_rank}] Loss: {loss.item():.4f}")
+    print(f"[rank {pgm.pgm.global_rank}] Loss: {loss.item():.4f}")
 
     if is_log_rank and args.use_wandb:
         wandb.log({"loss": loss.item()})

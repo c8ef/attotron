@@ -24,16 +24,16 @@ class PGM:
         self.world_group = dist.group.WORLD
         self.dp_group = dist.new_subgroups_by_enumeration([
             self.grid[:, t, p].tolist() for t in range(tp_size) for p in range(pp_size)
-        ])
+        ])[0]
         self.tp_group = dist.new_subgroups_by_enumeration([
             self.grid[d, :, p].tolist() for d in range(dp_size) for p in range(pp_size)
-        ])
+        ])[0]
         self.pp_group = dist.new_subgroups_by_enumeration([
             self.grid[d, t, :].tolist() for d in range(dp_size) for t in range(tp_size)
-        ])
+        ])[0]
 
         self.dp_group_ids = self.grid[:, self.tp_rank, self.pp_rank]
-        self.tp_group_ids = self.grid[self.dp_rank, :, : self.pp_rank]
+        self.tp_group_ids = self.grid[self.dp_rank, :, self.pp_rank]
         self.pp_group_ids = self.grid[self.dp_rank, self.tp_rank, :]
 
         self.dp_world_size = dist.get_world_size(self.dp_group)
