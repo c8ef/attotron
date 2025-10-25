@@ -1,5 +1,5 @@
 """
-torchrun --nproc_per_node 1 -m attotron.train
+torchrun --nproc_per_node 2 -m attotron.train --tp_size 2 --run_name pgm --use_wandb
 """
 
 import argparse
@@ -9,10 +9,13 @@ import os
 import torch
 import torch.distributed as dist
 import torch.nn.functional as F
+import wandb
 from torch.optim import AdamW
 from transformers import AutoConfig
 
+from . import pgm
 from .model import Llama
+from .pgm import setup_pgm
 from .utils import print, set_all_seed
 
 if __name__ == "__main__":
@@ -35,6 +38,11 @@ if __name__ == "__main__":
     parser.add_argument("--learning_rate", type=float, default=3e-4)
     parser.add_argument("--seq_len", type=int, default=32)
     parser.add_argument("--micro_batch_size", type=int, default=1)
+
+    # Distributed training arguments
+    parser.add_argument("--dp_size", type=int, default=1, help="Data parallel size")
+    parser.add_argument("--tp_size", type=int, default=1, help="Tensor parallel size")
+    parser.add_argument("--pp_size", type=int, default=1, help="Pipeline parallel size")
 
     # Logging arguments
     parser.add_argument("--run_name", type=str, default="default_run")
@@ -62,8 +70,23 @@ if __name__ == "__main__":
         init_method="env://",
         timeout=datetime.timedelta(minutes=2),
     )
-
+    setup_pgm(args.dp_size, args.tp_size, args.pp_size)
     set_all_seed(args.seed)
+
+    is_log_rank = pgm.pgm.global_rank == 0
+    if is_log_rank and args.use_wandb:
+        wandb.init(
+            project="attotron",
+            name=f"{args.run_name}-{pgm.pgm}",
+            config={
+                "model": args.model_name,
+                "seed": args.seed,
+                "learning_rate": args.learning_rate,
+                "data_parallel_size": pgm.pgm.dp_world_size,
+                "tensor_parallel_size": pgm.pgm.tp_world_size,
+                "pipeline_parallel_size": pgm.pgm.pp_world_size,
+            },
+        )
 
     model_config = AutoConfig.from_pretrained(args.model_name)
     model_config.num_hidden_layers = args.num_hidden_layers
@@ -104,6 +127,10 @@ if __name__ == "__main__":
     # Optimizer step
     optimizer.step()
 
-    print(f"Loss: {loss.item():.4f}", is_print_rank=(global_rank == 0))
+    print(f"[rank {pgm.pgm.global_rank}] Loss: {loss.item():.4f}")
+
+    if is_log_rank and args.use_wandb:
+        wandb.log({"loss": loss.item()})
+        wandb.finish()
 
     dist.destroy_process_group()
