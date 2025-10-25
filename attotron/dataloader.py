@@ -33,7 +33,7 @@ class MicroBatchDataLoader(DataLoader):
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
 
         self.tokenized_dataset = self.tokenize_dataset(
-            self.dataset, "text", seq_len + 1, num_proc
+            self.dataset, "text", seq_len, num_proc
         )
         total_tokens = self.tokenized_dataset.num_rows * (self.seq_len + 1)
         assert total_tokens >= max_tokens, (
