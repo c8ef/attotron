@@ -25,8 +25,8 @@ def set_all_seed(seed):
         torch.cuda.manual_seed_all(seed)
 
 
-def to_readable_format(num, precision=3):
-    num_str = str(num)
+def readable(num, precision=3):
+    num_str = str(round(num))
     length = len(num_str)
 
     def format_with_precision(main, decimal, suffix):
