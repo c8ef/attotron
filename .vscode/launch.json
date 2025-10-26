@@ -1,0 +1,35 @@
+{
+  // Usage:
+  // debugpy-run \
+  //   -m torch.distributed.run \
+  //   -p 5678 \
+  //   -- \
+  //   --nproc_per_node 1 \
+  //   -m attotron.train \
+  //   --num_proc 16 \
+  //   --seq_len 128 \
+  //   --micro_batch_size 4 \
+  //   --gradient_accumulation_steps 8 \
+  //   --max_tokens 40960 \
+  //   --use_wandb \
+  //   --run_name dataloader
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "attotron",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": {
+        "host": "localhost",
+        "port": 5678
+      },
+      "pathMappings": [
+        {
+          "localRoot": "${workspaceFolder}",
+          "remoteRoot": "${workspaceFolder}"
+        }
+      ],
+      "justMyCode": false
+    }
+  ]
+}
