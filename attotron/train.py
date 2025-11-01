@@ -1,12 +1,13 @@
 """
 torchrun \
-    --nproc_per_node 1 \
+    --nproc_per_node 4 \
     -m attotron.train \
     --num_proc 16 \
     --seq_len 128 \
     --micro_batch_size 4 \
     --gradient_accumulation_steps 8 \
     --max_tokens 40960 \
+    --tp_size 4 \
     --use_wandb \
     --run_name dataloader
 """
