@@ -5,6 +5,8 @@ from flash_attn.flash_attn_interface import flash_attn_func
 from flash_attn.layers.rotary import apply_rotary_emb
 from flash_attn.ops.triton.layer_norm import layer_norm_fn
 
+from . import pgm
+
 
 def get_cos_sin(seq_len, head_dim, base=500000.0):
     assert head_dim % 2 == 0
@@ -48,6 +50,14 @@ class Attention(nn.Module):
         self.num_heads = config.num_attention_heads
         self.num_key_values = config.num_key_value_heads
         self.head_dim = self.hidden_size // self.num_heads
+        assert config.num_attention_heads % pgm.pgm.tp_world_size == 0, (
+            "num_attention_heads should be divisible by tp_world_size"
+        )
+        assert config.num_key_value_heads % pgm.pgm.tp_world_size == 0, (
+            "num_key_value_heads should be divisible by tp_world_size"
+        )
+        self.num_local_heads = config.num_attention_heads // pgm.pgm.tp_world_size
+        self.num_local_kv_heads = config.num_key_value_heads // pgm.pgm.tp_world_size
 
         self.q_proj = nn.Linear(
             config.hidden_size, self.num_heads * self.head_dim, bias=False
@@ -61,21 +71,21 @@ class Attention(nn.Module):
         self.out_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
 
     def forward(self, x, cos, sin):
-        batch_size, seq_len, hidden_dim = x.size()
+        batch_size, seq_len, _ = x.size()
         q = self.q_proj(x)
         k = self.k_proj(x)
         v = self.v_proj(x)
-        q = q.view(batch_size, seq_len, self.num_heads, self.head_dim)
-        k = k.view(batch_size, seq_len, self.num_key_values, self.head_dim)
-        v = v.view(batch_size, seq_len, self.num_key_values, self.head_dim)
+        q = q.view(batch_size, seq_len, self.num_local_heads, self.head_dim)
+        k = k.view(batch_size, seq_len, self.num_local_kv_heads, self.head_dim)
+        v = v.view(batch_size, seq_len, self.num_local_kv_heads, self.head_dim)
 
         q = apply_rotary_emb(q, cos, sin)
         k = apply_rotary_emb(k, cos, sin)
-        k = k.repeat_interleave(self.num_heads // self.num_key_values, dim=2)
-        v = v.repeat_interleave(self.num_heads // self.num_key_values, dim=2)
+        k = k.repeat_interleave(self.num_local_heads // self.num_local_kv_heads, dim=2)
+        v = v.repeat_interleave(self.num_local_heads // self.num_local_kv_heads, dim=2)
 
         out = flash_attn_func(q, k, v, causal=True)
-        out = out.reshape(batch_size, seq_len, hidden_dim)
+        out = out.reshape(batch_size, seq_len, self.num_local_heads * self.head_dim)
         out = self.out_proj(out)
         return out
 

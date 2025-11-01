@@ -27,6 +27,7 @@ from . import pgm
 from .dataloader import MicroBatchDataLoader
 from .model import Llama
 from .pgm import setup_pgm
+from .tensor_parallel import apply_tensor_parallel
 from .utils import print, readable, set_all_seed
 
 
@@ -138,6 +139,10 @@ if __name__ == "__main__":
     model_config.max_position_embeddings = args.seq_len
 
     model = Llama(config=model_config)
+
+    if pgm.pgm.tp_world_size > 1:
+        model = apply_tensor_parallel(model)
+
     model.to(dtype).to(device)
     model.train()
     dist.barrier()
