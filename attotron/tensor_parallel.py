@@ -54,7 +54,7 @@ class Gather(torch.autograd.Function):
             f"{grad_output.size(last_dim)} is not divisible by {pgm.pgm.tp_world_size}"
         )
         last_dim_size = grad_output.size(last_dim) // pgm.pgm.tp_world_size
-        chunks = torch.split(grad_output, last_dim_size, dim=last_dim_size)
+        chunks = torch.split(grad_output, last_dim_size, dim=last_dim)
         return chunks[pgm.pgm.tp_rank]
 
 
@@ -228,7 +228,9 @@ class VocabParallelEmbedding(nn.Module):
 
 
 def apply_tensor_parallel(model):
-    def _replace_module(_module, _linear_proj_name, _style, args={}):
+    def _replace_module(_module, _linear_proj_name, _style, args=None):
+        if args is None:
+            args = {}
         assert _style in ["column", "row", "vocab"]
 
         linear_layer = getattr(_module, _linear_proj_name)
