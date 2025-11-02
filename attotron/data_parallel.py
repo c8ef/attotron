@@ -13,13 +13,12 @@ class DataParallelNaive(nn.Module):
 
     def register_backward_hook(self, hook):
         for p in self.module.parameters():
-            if p.requires_grad is True:
+            if p.requires_grad:
                 p.register_hook(hook)
 
     def _allreduce_grads(self, grad):
         if self.require_backward_grad_sync:
-            dist.all_reduce(grad, op=dist.ReduceOp.SUM, group=pgm.pgm.dp_group)
-            grad /= pgm.pgm.dp_world_size
+            dist.all_reduce(grad, op=dist.ReduceOp.AVG, group=pgm.pgm.dp_group)
         return grad
 
     def forward(self, *inputs, **kwargs):
