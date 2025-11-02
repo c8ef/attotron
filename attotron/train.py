@@ -4,12 +4,12 @@ torchrun \
     -m attotron.train \
     --num_proc 16 \
     --seq_len 128 \
-    --micro_batch_size 4 \
+    --micro_batch_size 1 \
     --gradient_accumulation_steps 8 \
     --max_tokens 40960 \
-    --tp_size 4 \
+    --dp_size 4 \
     --use_wandb \
-    --run_name dataloader
+    --run_name dp_naive
 """
 
 import argparse
@@ -25,6 +25,7 @@ from torch.optim import AdamW
 from transformers import AutoConfig
 
 from . import pgm
+from .data_parallel import DataParallelNaive
 from .dataloader import MicroBatchDataLoader
 from .model import Llama
 from .pgm import setup_pgm
@@ -34,11 +35,15 @@ from .utils import print, readable, set_all_seed
 
 def train_step(model, dataloader, device):
     acc_loss = 0.0
+    requires_grad_sync = pgm.pgm.dp_world_size > 1
 
-    for _ in range(dataloader.grad_acc_steps):
+    for i in range(dataloader.grad_acc_steps):
         batch = next(dataloader)
         input_ids = batch["input_ids"].to(device)
         target_ids = batch["target_ids"].to(device)
+
+        if requires_grad_sync:
+            model.require_backward_grad_sync = i == dataloader.grad_acc_steps - 1
 
         outputs = model(input_ids)
 
@@ -145,6 +150,10 @@ if __name__ == "__main__":
         model = apply_tensor_parallel(model)
 
     model.to(dtype).to(device)
+
+    if pgm.pgm.dp_world_size > 1:
+        model = DataParallelNaive(model)
+
     model.train()
     dist.barrier()
 
@@ -153,6 +162,7 @@ if __name__ == "__main__":
 
     # Create dataloader
     dataloader = MicroBatchDataLoader(
+        seed=args.seed,
         seq_len=args.seq_len,
         micro_batch_size=args.micro_batch_size,
         grad_acc_steps=args.gradient_accumulation_steps,

@@ -3,7 +3,7 @@ from functools import partial
 import numpy as np
 import torch
 from datasets import Features, Sequence, Value, load_dataset
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, DistributedSampler
 from transformers import AutoTokenizer
 
 from . import pgm
@@ -20,6 +20,7 @@ class MicroBatchDataLoader(DataLoader):
         max_tokens,
         num_workers,
         num_proc,
+        seed,
         split="train",
     ):
         self.seq_len = seq_len
@@ -41,10 +42,19 @@ class MicroBatchDataLoader(DataLoader):
             f"Have {total_tokens} tokens but need {max_tokens} tokens"
         )
 
+        self.sampler = DistributedSampler(
+            self.tokenized_dataset,
+            num_replicas=pgm.pgm.dp_world_size,
+            rank=pgm.pgm.dp_rank,
+            seed=seed,
+            shuffle=False,
+        )
+
         super().__init__(
             self.tokenized_dataset,
             batch_size=micro_batch_size,
             shuffle=False,
+            sampler=self.sampler,
             num_workers=num_workers,
             collate_fn=self.collate_batch,
             pin_memory=True,
