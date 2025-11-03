@@ -194,6 +194,9 @@ if __name__ == "__main__":
         trained_tokens += tokens_per_step
         step += 1
 
+        if hasattr(model, "reset"):
+            model.reset()
+
         print(
             f"[rank {pgm.pgm.global_rank}] Step: {step}, Loss: {loss:.4f}, "
             f"Global batch size (with seq_len): {readable(tokens_per_step)}, "

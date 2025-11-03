@@ -61,7 +61,7 @@ class Bucket:
 
 
 class BucketManager:
-    def __init__(self, params, process_group, bucket_size, grad_type=torch.float32):
+    def __init__(self, params, process_group, bucket_size=25, grad_type=torch.float32):
         self.params = list(params)
         self.buckets = []
         self.process_group = process_group
@@ -95,7 +95,7 @@ class BucketManager:
 
         bucket_sizes = [0] * (cur_bucket_idx + 1)
         buckets_to_params = [[] for _ in range(cur_bucket_idx + 1)]
-        for param, (_, end, idx) in self.params_to_bucket_location:
+        for param, (_, end, idx) in self.params_to_bucket_location.items():
             bucket_sizes[idx] = max(bucket_sizes[idx], end)
             buckets_to_params[idx].append(param)
 
@@ -108,7 +108,7 @@ class BucketManager:
             )
 
         for param in self.params[::-1]:
-            if not param.required_grad:
+            if not param.requires_grad:
                 continue
             data_start_idx, data_end_idx, bucket_id = self.params_to_bucket_location[
                 param
@@ -147,7 +147,7 @@ class DataParallelBucket(nn.Module):
     def register_backward_hook(self):
         self.grad_accs = []
         for param in self.module.parameters():
-            if param.required_grad:
+            if param.requires_grad:
                 param_tmp = param.expand_as(param)
                 grad_acc_fn = param_tmp.grad_fn.next_functions[0][0]
                 grad_acc_fn.register_hook(
