@@ -61,7 +61,7 @@ class Bucket:
 
 
 class BucketManager:
-    def __init__(self, params, process_group, bucket_size=25, grad_type=torch.float32):
+    def __init__(self, params, process_group, bucket_size, grad_type=torch.float32):
         self.params = list(params)
         self.buckets = []
         self.process_group = process_group
@@ -131,7 +131,7 @@ class BucketManager:
 
 
 class DataParallelBucket(nn.Module):
-    def __init__(self, module, bucket_cap_mb, grad_type=torch.float32):
+    def __init__(self, module, bucket_cap_mb=25, grad_type=torch.float32):
         super().__init__()
         self.module = module
         self.require_backward_grad_sync = True
