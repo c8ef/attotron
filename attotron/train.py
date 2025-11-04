@@ -9,7 +9,7 @@ torchrun \
     --max_tokens 40960 \
     --dp_size 4 \
     --use_wandb \
-    --run_name dp_naive
+    --run_name dp_bucket
 """
 
 import argparse
@@ -25,7 +25,7 @@ from torch.optim import AdamW
 from transformers import AutoConfig
 
 from . import pgm
-from .data_parallel import DataParallelNaive
+from .data_parallel import DataParallelBucket
 from .dataloader import MicroBatchDataLoader
 from .model import Llama
 from .pgm import setup_pgm
@@ -152,7 +152,7 @@ if __name__ == "__main__":
     model.to(dtype).to(device)
 
     if pgm.pgm.dp_world_size > 1:
-        model = DataParallelNaive(model)
+        model = DataParallelBucket(model)
 
     model.train()
     dist.barrier()
@@ -193,6 +193,9 @@ if __name__ == "__main__":
         step_duration = time.time() - step_start_time
         trained_tokens += tokens_per_step
         step += 1
+
+        if hasattr(model, "reset"):
+            model.reset()
 
         print(
             f"[rank {pgm.pgm.global_rank}] Step: {step}, Loss: {loss:.4f}, "
