@@ -182,8 +182,5 @@ class DataParallelBucket(nn.Module):
     def forward(self, *inputs, **kwargs):
         return self.module(*inputs, **kwargs)
 
-    def backward(self, input_tensor, output_tensor, output_tensor_grad):
-        return self.module.backward(input_tensor, output_tensor, output_tensor_grad)
-
     def reset(self):
         self.bucket_manager.reset()
