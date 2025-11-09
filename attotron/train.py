@@ -4,12 +4,13 @@ torchrun \
     -m attotron.train \
     --num_proc 16 \
     --seq_len 128 \
-    --micro_batch_size 1 \
+    --micro_batch_size 4 \
     --gradient_accumulation_steps 8 \
     --max_tokens 40960 \
-    --dp_size 4 \
+    --pp_size 4 \
+    --pp_engine afab \
     --use_wandb \
-    --run_name dp_bucket
+    --run_name pp_afab
 """
 
 import argparse
@@ -29,8 +30,18 @@ from .data_parallel import DataParallelBucket
 from .dataloader import MicroBatchDataLoader
 from .model import Llama
 from .pgm import setup_pgm
+from .pipeline_parallel import PipelineParallel, train_step_pipeline_afab
 from .tensor_parallel import apply_tensor_parallel
 from .utils import print, readable, set_all_seed
+
+
+def all_reduce_loss_across_dp_ranks(loss, device):
+    reduced_loss = torch.tensor(
+        [loss if loss is not None else 0.0], dtype=torch.float32, device=device
+    )
+    if pgm.pgm.pp_is_last_stage:
+        dist.all_reduce(reduced_loss, op=dist.ReduceOp.AVG, group=pgm.pgm.dp_group)
+    return reduced_loss.item()
 
 
 def train_step(model, dataloader, device):
@@ -93,6 +104,9 @@ if __name__ == "__main__":
     parser.add_argument("--dp_size", type=int, default=1, help="Data parallel size")
     parser.add_argument("--tp_size", type=int, default=1, help="Tensor parallel size")
     parser.add_argument("--pp_size", type=int, default=1, help="Pipeline parallel size")
+    parser.add_argument(
+        "--pp_engine", type=str, default="afab", choices=["afab", "1f1b"]
+    )
 
     # Logging arguments
     parser.add_argument("--use_wandb", action="store_true")
@@ -123,7 +137,9 @@ if __name__ == "__main__":
     setup_pgm(args.dp_size, args.tp_size, args.pp_size)
     set_all_seed(args.seed)
 
-    is_log_rank = pgm.pgm.global_rank == 0
+    is_log_rank = (
+        pgm.pgm.tp_rank == 0 and pgm.pgm.dp_rank == 0 and pgm.pgm.pp_is_last_stage
+    )
     if is_log_rank and args.use_wandb:
         wandb.init(
             project="attotron",
@@ -148,6 +164,9 @@ if __name__ == "__main__":
 
     if pgm.pgm.tp_world_size > 1:
         model = apply_tensor_parallel(model)
+
+    if pgm.pgm.pp_world_size > 1:
+        model = PipelineParallel(model, model_config)
 
     model.to(dtype).to(device)
 
@@ -180,6 +199,11 @@ if __name__ == "__main__":
     )
 
     trained_tokens, step = 0, 0
+    tensor_shapes = (
+        dataloader.micro_batch_size,
+        dataloader.seq_len,
+        model_config.hidden_size,
+    )
     dist.barrier()
 
     # Training loop
@@ -187,7 +211,16 @@ if __name__ == "__main__":
         step_start_time = time.time()
 
         optimizer.zero_grad()
-        loss = train_step(model, dataloader, device)
+
+        if pgm.pgm.pp_world_size > 1:
+            if args.pp_engine == "afab":
+                loss = train_step_pipeline_afab(
+                    model, dataloader, tensor_shapes, device, dtype
+                )
+        else:
+            loss = train_step(model, dataloader, device)
+        loss = all_reduce_loss_across_dp_ranks(loss, device)
+
         optimizer.step()
 
         step_duration = time.time() - step_start_time
