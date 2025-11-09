@@ -4,7 +4,7 @@ torchrun \
     -m attotron.train \
     --num_proc 16 \
     --seq_len 128 \
-    --micro_batch_size 1 \
+    --micro_batch_size 4 \
     --gradient_accumulation_steps 8 \
     --max_tokens 40960 \
     --pp_size 4 \
@@ -137,7 +137,9 @@ if __name__ == "__main__":
     setup_pgm(args.dp_size, args.tp_size, args.pp_size)
     set_all_seed(args.seed)
 
-    is_log_rank = pgm.pgm.global_rank == 0
+    is_log_rank = (
+        pgm.pgm.tp_rank == 0 and pgm.pgm.dp_rank == 0 and pgm.pgm.pp_is_last_stage
+    )
     if is_log_rank and args.use_wandb:
         wandb.init(
             project="attotron",
