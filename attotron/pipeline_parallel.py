@@ -119,7 +119,8 @@ def train_step_pipeline_afab(model, data_loader, tensor_shapes, device, dtype):
             input_tensor.to(device) if input_tensor is not None else input_tensor
         )
         output_tensor = model.forward(
-            input_ids=batch["input_ids"], hidden_states=batch["hidden_states"]
+            input_ids=batch["input_ids"].to(device),
+            hidden_states=batch["hidden_states"],
         )
         pipeline_communicate(
             operation="send_forward",
