@@ -61,7 +61,7 @@ class PipelineParallel(nn.Module):
 
         self.embedding = model.embedding if pgm.pgm.pp_is_first_stage else nn.Identity()
         self.decoder_layers = nn.ModuleDict({
-            str(i): model.decoder_layers[i] for i in range(layer_distribution)
+            str(i): model.decoder_layers[i] for i in layer_distribution
         })
         self.final_norm = (
             model.final_norm if pgm.pgm.pp_is_last_stage else nn.Identity()
@@ -115,7 +115,9 @@ def train_step_pipeline_afab(model, data_loader, tensor_shapes, device, dtype):
             operation="recv_forward", device=device, dtype=dtype, shape=tensor_shapes
         )
         batch = next(data_loader)
-        batch["hidden_states"] = input_tensor.to(device)
+        batch["hidden_states"] = (
+            input_tensor.to(device) if input_tensor is not None else input_tensor
+        )
         output_tensor = model.forward(
             input_ids=batch["input_ids"], hidden_states=batch["hidden_states"]
         )
