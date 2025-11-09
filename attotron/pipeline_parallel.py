@@ -131,7 +131,9 @@ def train_step_pipeline_afab(model, data_loader, tensor_shapes, device, dtype):
 
         if pgm.pgm.pp_is_last_stage:
             output_tensor = F.cross_entropy(
-                output_tensor.transpose(1, 2), batch["target_ids"], reduction="mean"
+                output_tensor.transpose(1, 2),
+                batch["target_ids"].to(device),
+                reduction="mean",
             )
             logging_loss += output_tensor.item() / data_loader.grad_acc_steps
 
