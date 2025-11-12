@@ -76,7 +76,7 @@ def bidirectional_pipeline_communicate(
     if VERBOSE:
         print(
             f"{operation} | send-ing {'next' if is_fwd else 'prev'} {pgm.pgm.pp_rank} "
-            f"-> {peer_rank} | recv-ing {'next' if is_fwd else 'prev'} {peer_rank} -> ",
+            f"-> {peer_rank} | recv-ing {'next' if is_fwd else 'prev'} {peer_rank} -> "
             f"{pgm.pgm.pp_rank} | STEP:{STEP}",
             flush=True,
         )
