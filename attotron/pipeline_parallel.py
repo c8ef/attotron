@@ -54,6 +54,42 @@ def pipeline_communicate(operation, device, dtype, tensor=None, shape=None):
     return tensor if not is_send else None
 
 
+def bidirectional_pipeline_communicate(
+    operation, device, dtype, send_tensor=None, recv_shape=None
+):
+    global STEP, VERBOSE
+
+    is_fwd = operation == "send_fwd_recv_bwd"
+    if is_fwd and pgm.pgm.pp_is_last_stage or not is_fwd and pgm.pgm.pp_is_first_stage:
+        return None
+
+    peer_rank = pgm.pgm.pp_next_rank if is_fwd else pgm.pgm.pp_prev_rank
+    recv_tensor = torch.empty(
+        recv_shape, requires_grad=True, device=device, dtype=dtype
+    )
+
+    reqs = dist.batch_isend_irecv([
+        dist.P2POp(dist.isend, send_tensor, peer_rank),
+        dist.P2POp(dist.irecv, recv_tensor, peer_rank),
+    ])
+
+    if VERBOSE:
+        print(
+            f"{operation} | send-ing {'next' if is_fwd else 'prev'} {pgm.pgm.pp_rank} "
+            f"-> {peer_rank} | recv-ing {'next' if is_fwd else 'prev'} {peer_rank} -> "
+            f"{pgm.pgm.pp_rank} | STEP:{STEP}",
+            flush=True,
+        )
+
+    [req.wait() for req in reqs]
+    torch.cuda.synchronize()
+
+    if VERBOSE:
+        STEP += 1
+
+    return recv_tensor
+
+
 class PipelineParallel(nn.Module):
     def __init__(self, model, config):
         super().__init__()
@@ -157,4 +193,115 @@ def train_step_pipeline_afab(model, data_loader, tensor_shapes, device, dtype):
             dtype=dtype,
             tensor=input_tensor_grad,
         )
+    return logging_loss
+
+
+def train_step_pipeline_1f1b(model, data_loader, tensor_shapes, device, dtype):
+    logging_loss = 0.0
+    input_tensors = []
+    output_tensors = []
+    requires_grad_sync = pgm.pgm.dp_world_size > 1
+
+    num_warmup_microbatches = min(
+        pgm.pgm.pp_world_size - pgm.pgm.pp_rank - 1, data_loader.grad_acc_steps
+    )
+    num_microbatches_remaining = data_loader.grad_acc_steps - num_warmup_microbatches
+
+    def _forward_step(input_tensor):
+        batch = next(data_loader)
+        batch["hidden_states"] = (
+            input_tensor.to(device) if input_tensor is not None else input_tensor
+        )
+        output_tensor = model.forward(
+            input_ids=batch["input_ids"].to(device),
+            hidden_states=batch["hidden_states"],
+        )
+
+        if pgm.pgm.pp_is_last_stage:
+            output_tensor = F.cross_entropy(
+                output_tensor.transpose(1, 2),
+                batch["target_ids"].to(device),
+                reduction="mean",
+            )
+            nonlocal logging_loss
+            logging_loss += output_tensor.item() / data_loader.grad_acc_steps
+
+        return output_tensor
+
+    for _ in range(num_warmup_microbatches):
+        input_tensor = pipeline_communicate(
+            operation="recv_forward", device=device, dtype=dtype, shape=tensor_shapes
+        )
+        output_tensor = _forward_step(input_tensor)
+        pipeline_communicate(
+            operation="send_forward", device=device, dtype=dtype, tensor=output_tensor
+        )
+        input_tensors.append(input_tensor)
+        output_tensors.append(output_tensor)
+
+    if num_microbatches_remaining > 0:
+        input_tensor = pipeline_communicate(
+            operation="recv_forward", device=device, dtype=dtype, shape=tensor_shapes
+        )
+
+    if requires_grad_sync:
+        model.require_backward_grad_sync = False
+
+    for ith_microbatch in range(num_microbatches_remaining):
+        is_last_iteration = ith_microbatch == num_microbatches_remaining - 1
+        output_tensor = _forward_step(input_tensor)
+        output_tensor_grad = bidirectional_pipeline_communicate(
+            operation="send_fwd_recv_bwd",
+            device=device,
+            dtype=dtype,
+            send_tensor=output_tensor,
+            recv_shape=tensor_shapes,
+        )
+        input_tensors.append(input_tensor)
+        output_tensors.append(output_tensor)
+
+        input_tensor, output_tensor = input_tensors.pop(0), output_tensors.pop(0)
+        if num_warmup_microbatches == 0 and is_last_iteration:
+            model.require_backward_grad_sync = True
+        input_tensor_grad = model.backward(
+            input_tensor, output_tensor, output_tensor_grad
+        )
+
+        if is_last_iteration:
+            input_tensor = None
+            pipeline_communicate(
+                operation="send_backward",
+                device=device,
+                dtype=dtype,
+                tensor=input_tensor_grad,
+            )
+        else:
+            input_tensor = bidirectional_pipeline_communicate(
+                operation="send_bwd_recv_fwd",
+                device=device,
+                dtype=dtype,
+                send_tensor=input_tensor_grad,
+                recv_shape=tensor_shapes,
+            )
+
+    for ith_warmup_microbatches in range(num_warmup_microbatches):
+        if requires_grad_sync:
+            is_last_iteration = ith_warmup_microbatches == num_warmup_microbatches - 1
+            model.require_backward_grad_sync = (
+                ith_warmup_microbatches == num_warmup_microbatches - 1
+            )
+        input_tensor, output_tensor = input_tensors.pop(0), output_tensors.pop(0)
+        output_tensor_grad = pipeline_communicate(
+            operation="recv_backward", device=device, dtype=dtype, shape=tensor_shapes
+        )
+        input_tensor_grad = model.backward(
+            input_tensor, output_tensor, output_tensor_grad
+        )
+        pipeline_communicate(
+            operation="send_backward",
+            device=device,
+            dtype=dtype,
+            tensor=input_tensor_grad,
+        )
+
     return logging_loss

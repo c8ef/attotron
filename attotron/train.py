@@ -8,9 +8,9 @@ torchrun \
     --gradient_accumulation_steps 8 \
     --max_tokens 40960 \
     --pp_size 4 \
-    --pp_engine afab \
+    --pp_engine 1f1b \
     --use_wandb \
-    --run_name pp_afab
+    --run_name pp_1f1b
 """
 
 import argparse
@@ -30,7 +30,11 @@ from .data_parallel import DataParallelBucket
 from .dataloader import MicroBatchDataLoader
 from .model import Llama
 from .pgm import setup_pgm
-from .pipeline_parallel import PipelineParallel, train_step_pipeline_afab
+from .pipeline_parallel import (
+    PipelineParallel,
+    train_step_pipeline_1f1b,
+    train_step_pipeline_afab,
+)
 from .tensor_parallel import apply_tensor_parallel
 from .utils import print, readable, set_all_seed
 
@@ -217,6 +221,12 @@ if __name__ == "__main__":
                 loss = train_step_pipeline_afab(
                     model, dataloader, tensor_shapes, device, dtype
                 )
+            elif args.pp_engine == "1f1b":
+                loss = train_step_pipeline_1f1b(
+                    model, dataloader, tensor_shapes, device, dtype
+                )
+            else:
+                raise ValueError(f"Invalid pipeline parallel engine: {args.pp_engine}")
         else:
             loss = train_step(model, dataloader, device)
         loss = all_reduce_loss_across_dp_ranks(loss, device)
