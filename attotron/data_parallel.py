@@ -2,7 +2,7 @@ import torch
 import torch.distributed as dist
 import torch.nn as nn
 
-from . import pgm
+from attotron import pgm
 
 
 class DataParallelNaive(nn.Module):

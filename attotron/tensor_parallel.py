@@ -5,7 +5,7 @@ import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
 
-from . import pgm
+from attotron import pgm
 
 
 class Copy(torch.autograd.Function):

@@ -25,18 +25,18 @@ import wandb
 from torch.optim import AdamW
 from transformers import AutoConfig
 
-from . import pgm
-from .data_parallel import DataParallelBucket
-from .dataloader import MicroBatchDataLoader
-from .model import Llama
-from .pgm import setup_pgm
-from .pipeline_parallel import (
+from attotron import pgm
+from attotron.data_parallel import DataParallelBucket
+from attotron.dataloader import MicroBatchDataLoader
+from attotron.model import Llama
+from attotron.pgm import setup_pgm
+from attotron.pipeline_parallel import (
     PipelineParallel,
     train_step_pipeline_1f1b,
     train_step_pipeline_afab,
 )
-from .tensor_parallel import apply_tensor_parallel
-from .utils import print, readable, set_all_seed
+from attotron.tensor_parallel import apply_tensor_parallel
+from attotron.utils import print, readable, set_all_seed
 
 
 def all_reduce_loss_across_dp_ranks(loss, device):
