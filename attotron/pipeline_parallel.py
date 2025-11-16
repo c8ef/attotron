@@ -5,7 +5,7 @@ import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
 
-from . import pgm
+from attotron import pgm
 
 STEP = 0
 VERBOSE = os.environ.get("VERBOSE", "0") == "1"

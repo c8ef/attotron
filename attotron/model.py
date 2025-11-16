@@ -5,7 +5,7 @@ from flash_attn.flash_attn_interface import flash_attn_func
 from flash_attn.layers.rotary import apply_rotary_emb
 from flash_attn.ops.triton.layer_norm import layer_norm_fn
 
-from . import pgm
+from attotron import pgm
 
 
 def get_cos_sin(seq_len, head_dim, base=500000.0):

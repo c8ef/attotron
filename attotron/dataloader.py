@@ -6,7 +6,7 @@ from datasets import Features, Sequence, Value, load_dataset
 from torch.utils.data import DataLoader, DistributedSampler
 from transformers import AutoTokenizer
 
-from . import pgm
+from attotron import pgm
 
 
 class MicroBatchDataLoader(DataLoader):
