@@ -8,9 +8,7 @@ class PGM:
     def __init__(self, dp_size, tp_size, pp_size):
         self.world_size = dist.get_world_size()
         self.global_rank = dist.get_rank()
-        self.local_rank = int(
-            os.environ.get("LOCAL_RANK", self.global_rank % self.world_size)
-        )
+        self.local_rank = int(os.environ.get("LOCAL_RANK", self.global_rank % self.world_size))
 
         assert self.world_size == dp_size * tp_size * pp_size, (
             f"WORLD({self.world_size}) != DP({dp_size}) * TP({tp_size}) * PP({pp_size})"
@@ -22,15 +20,15 @@ class PGM:
         )
 
         self.world_group = dist.group.WORLD
-        self.dp_group = dist.new_subgroups_by_enumeration([
-            self.grid[:, t, p].tolist() for t in range(tp_size) for p in range(pp_size)
-        ])[0]
-        self.tp_group = dist.new_subgroups_by_enumeration([
-            self.grid[d, :, p].tolist() for d in range(dp_size) for p in range(pp_size)
-        ])[0]
-        self.pp_group = dist.new_subgroups_by_enumeration([
-            self.grid[d, t, :].tolist() for d in range(dp_size) for t in range(tp_size)
-        ])[0]
+        self.dp_group = dist.new_subgroups_by_enumeration(
+            [self.grid[:, t, p].tolist() for t in range(tp_size) for p in range(pp_size)]
+        )[0]
+        self.tp_group = dist.new_subgroups_by_enumeration(
+            [self.grid[d, :, p].tolist() for d in range(dp_size) for p in range(pp_size)]
+        )[0]
+        self.pp_group = dist.new_subgroups_by_enumeration(
+            [self.grid[d, t, :].tolist() for d in range(dp_size) for t in range(tp_size)]
+        )[0]
 
         self.dp_group_ids = self.grid[:, self.tp_rank, self.pp_rank]
         self.tp_group_ids = self.grid[self.dp_rank, :, self.pp_rank]

@@ -54,9 +54,7 @@ def pipeline_communicate(operation, device, dtype, tensor=None, shape=None):
     return tensor if not is_send else None
 
 
-def bidirectional_pipeline_communicate(
-    operation, device, dtype, send_tensor=None, recv_shape=None
-):
+def bidirectional_pipeline_communicate(operation, device, dtype, send_tensor=None, recv_shape=None):
     global STEP, VERBOSE
 
     is_fwd = operation == "send_fwd_recv_bwd"
@@ -64,14 +62,14 @@ def bidirectional_pipeline_communicate(
         return None
 
     peer_rank = pgm.pgm.pp_next_rank if is_fwd else pgm.pgm.pp_prev_rank
-    recv_tensor = torch.empty(
-        recv_shape, requires_grad=True, device=device, dtype=dtype
-    )
+    recv_tensor = torch.empty(recv_shape, requires_grad=True, device=device, dtype=dtype)
 
-    reqs = dist.batch_isend_irecv([
-        dist.P2POp(dist.isend, send_tensor, peer_rank),
-        dist.P2POp(dist.irecv, recv_tensor, peer_rank),
-    ])
+    reqs = dist.batch_isend_irecv(
+        [
+            dist.P2POp(dist.isend, send_tensor, peer_rank),
+            dist.P2POp(dist.irecv, recv_tensor, peer_rank),
+        ]
+    )
 
     if VERBOSE:
         print(
@@ -96,15 +94,11 @@ class PipelineParallel(nn.Module):
         layer_distribution = self.distribute_layers(config.num_hidden_layers)
 
         self.embedding = model.embedding if pgm.pgm.pp_is_first_stage else nn.Identity()
-        self.decoder_layers = nn.ModuleDict({
-            str(i): model.decoder_layers[i] for i in layer_distribution
-        })
-        self.final_norm = (
-            model.final_norm if pgm.pgm.pp_is_last_stage else nn.Identity()
+        self.decoder_layers = nn.ModuleDict(
+            {str(i): model.decoder_layers[i] for i in layer_distribution}
         )
-        self.final_proj = (
-            model.final_proj if pgm.pgm.pp_is_last_stage else nn.Identity()
-        )
+        self.final_norm = model.final_norm if pgm.pgm.pp_is_last_stage else nn.Identity()
+        self.final_proj = model.final_proj if pgm.pgm.pp_is_last_stage else nn.Identity()
 
     def distribute_layers(self, num_layers):
         layers_per_gpu = [
@@ -128,9 +122,7 @@ class PipelineParallel(nn.Module):
         if input_tensor is not None:
             input_tensor.retain_grad()
         if output_tensor is None:
-            output_tensor_grad = torch.ones_like(
-                output_tensor, memory_format=torch.preserve_format
-            )
+            output_tensor_grad = torch.ones_like(output_tensor, memory_format=torch.preserve_format)
         torch.autograd.backward(
             output_tensor,
             grad_tensors=output_tensor_grad,
@@ -184,9 +176,7 @@ def train_step_pipeline_afab(model, data_loader, tensor_shapes, device, dtype):
             operation="recv_backward", device=device, dtype=dtype, shape=tensor_shapes
         )
         input_tensor, output_tensor = input_tensors.pop(0), output_tensors.pop(0)
-        input_tensor_grad = model.backward(
-            input_tensor, output_tensor, output_tensor_grad
-        )
+        input_tensor_grad = model.backward(input_tensor, output_tensor, output_tensor_grad)
         pipeline_communicate(
             operation="send_backward",
             device=device,
@@ -263,9 +253,7 @@ def train_step_pipeline_1f1b(model, data_loader, tensor_shapes, device, dtype):
         input_tensor, output_tensor = input_tensors.pop(0), output_tensors.pop(0)
         if num_warmup_microbatches == 0 and is_last_iteration:
             model.require_backward_grad_sync = True
-        input_tensor_grad = model.backward(
-            input_tensor, output_tensor, output_tensor_grad
-        )
+        input_tensor_grad = model.backward(input_tensor, output_tensor, output_tensor_grad)
 
         if is_last_iteration:
             input_tensor = None
@@ -294,9 +282,7 @@ def train_step_pipeline_1f1b(model, data_loader, tensor_shapes, device, dtype):
         output_tensor_grad = pipeline_communicate(
             operation="recv_backward", device=device, dtype=dtype, shape=tensor_shapes
         )
-        input_tensor_grad = model.backward(
-            input_tensor, output_tensor, output_tensor_grad
-        )
+        input_tensor_grad = model.backward(input_tensor, output_tensor, output_tensor_grad)
         pipeline_communicate(
             operation="send_backward",
             device=device,

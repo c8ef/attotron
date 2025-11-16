@@ -26,20 +26,15 @@ class MicroBatchDataLoader(DataLoader):
         self.seq_len = seq_len
         self.micro_batch_size = micro_batch_size
         self.grad_acc_steps = grad_acc_steps
-        self.global_batch_size = (
-            micro_batch_size * grad_acc_steps * pgm.pgm.dp_world_size
-        )
+        self.global_batch_size = micro_batch_size * grad_acc_steps * pgm.pgm.dp_world_size
 
         self.dataset = load_dataset(dataset_name, split=split)
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
 
-        self.tokenized_dataset = self.tokenize_dataset(
-            self.dataset, "text", seq_len, num_proc
-        )
+        self.tokenized_dataset = self.tokenize_dataset(self.dataset, "text", seq_len, num_proc)
         total_tokens = self.tokenized_dataset.num_rows * (seq_len + 1)
         assert total_tokens >= max_tokens, (
-            f"Not enough tokens. "
-            f"Have {total_tokens} tokens but need {max_tokens} tokens"
+            f"Not enough tokens. Have {total_tokens} tokens but need {max_tokens} tokens"
         )
 
         self.sampler = DistributedSampler(
@@ -61,12 +56,8 @@ class MicroBatchDataLoader(DataLoader):
         )
 
     def tokenize_group_text(self, examples, tokenizer, seq_len):
-        tokenized_text_batch = tokenizer.batch_encode_plus(
-            examples, return_tensors="np"
-        )
-        concatenated_tokens = {
-            "input_ids": np.concatenate(tokenized_text_batch["input_ids"])
-        }
+        tokenized_text_batch = tokenizer.batch_encode_plus(examples, return_tensors="np")
+        concatenated_tokens = {"input_ids": np.concatenate(tokenized_text_batch["input_ids"])}
         total_len = len(concatenated_tokens["input_ids"])
 
         if total_len >= seq_len + 1:
@@ -88,9 +79,9 @@ class MicroBatchDataLoader(DataLoader):
             tokenizer_func,
             input_columns=text_column_name,
             remove_columns=dataset.column_names,
-            features=Features({
-                "input_ids": Sequence(feature=Value(dtype="int64"), length=seq_len + 1)
-            }),
+            features=Features(
+                {"input_ids": Sequence(feature=Value(dtype="int64"), length=seq_len + 1)}
+            ),
             batched=True,
             num_proc=num_proc,
             load_from_cache_file=True,
@@ -99,9 +90,7 @@ class MicroBatchDataLoader(DataLoader):
         return tokenized_dataset
 
     def collate_batch(self, batch):
-        batch_input_ids = torch.stack([
-            torch.tensor(item["input_ids"]) for item in batch
-        ])
+        batch_input_ids = torch.stack([torch.tensor(item["input_ids"]) for item in batch])
         input_ids = batch_input_ids[:, :-1].contiguous()
         target_ids = batch_input_ids[:, 1:].contiguous()
         return {"input_ids": input_ids, "target_ids": target_ids}

@@ -71,9 +71,7 @@ class ColumnParallelLinear(nn.Module):
         self.output_size_per_partition = out_features // self.tp_world_size
         self.gather_output = gather_output
 
-        self.weight = nn.Parameter(
-            torch.Tensor(self.output_size_per_partition, self.in_features)
-        )
+        self.weight = nn.Parameter(torch.Tensor(self.output_size_per_partition, self.in_features))
         if bias:
             self.bias = nn.Parameter(torch.Tensor(self.output_size_per_partition))
             with torch.no_grad():
@@ -121,9 +119,7 @@ class RowParallelLinear(nn.Module):
         )
         self.input_size_per_partition = in_features // self.tp_world_size
 
-        self.weight = nn.Parameter(
-            torch.Tensor(self.out_features, self.input_size_per_partition)
-        )
+        self.weight = nn.Parameter(torch.Tensor(self.out_features, self.input_size_per_partition))
         if bias:
             self.bias = nn.Parameter(torch.Tensor(self.out_features))
             with torch.no_grad():
@@ -184,9 +180,7 @@ class VocabParallelEmbedding(nn.Module):
         )
         self.num_embeddings_per_partition = num_embeddings // self.tp_world_size
         self.vocab_start_index = self.tp_rank * self.num_embeddings_per_partition
-        self.vocab_end_index = (
-            self.vocab_start_index + self.num_embeddings_per_partition
-        )
+        self.vocab_end_index = self.vocab_start_index + self.num_embeddings_per_partition
         self.weight = nn.Parameter(
             torch.Tensor(self.num_embeddings_per_partition, self.embedding_dim)
         )
@@ -204,9 +198,7 @@ class VocabParallelEmbedding(nn.Module):
             requires_grad=False,
         )
         nn.init.normal_(master_weight, mean=0.0, std=1.0)
-        weight_list = torch.split(
-            master_weight, self.num_embeddings_per_partition, dim=0
-        )
+        weight_list = torch.split(master_weight, self.num_embeddings_per_partition, dim=0)
         self.weight.data = weight_list[self.tp_rank].contiguous()
 
     def forward(self, input):
