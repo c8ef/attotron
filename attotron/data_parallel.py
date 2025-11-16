@@ -45,9 +45,7 @@ class Bucket:
     def sync_gradient(self):
         assert self.handle is None
         self.grad_data /= self.process_group_size
-        self.handle = dist.all_reduce(
-            self.grad_data, group=self.process_group, async_op=True
-        )
+        self.handle = dist.all_reduce(self.grad_data, group=self.process_group, async_op=True)
 
     def mark_param_as_ready(self, param):
         assert param in self.params and param not in self.params_with_grad_ready
@@ -110,12 +108,10 @@ class BucketManager:
         for param in self.params[::-1]:
             if not param.requires_grad:
                 continue
-            data_start_idx, data_end_idx, bucket_id = self.params_to_bucket_location[
-                param
-            ]
-            param.main_grad = self.grad_data_list[bucket_id][
-                data_start_idx:data_end_idx
-            ].view(param.shape)
+            data_start_idx, data_end_idx, bucket_id = self.params_to_bucket_location[param]
+            param.main_grad = self.grad_data_list[bucket_id][data_start_idx:data_end_idx].view(
+                param.shape
+            )
 
     def reset(self):
         for bucket in self.buckets:
@@ -150,9 +146,7 @@ class DataParallelBucket(nn.Module):
             if param.requires_grad:
                 param_tmp = param.expand_as(param)
                 grad_acc_fn = param_tmp.grad_fn.next_functions[0][0]
-                grad_acc_fn.register_hook(
-                    self._make_param_hook(param, self.bucket_manager)
-                )
+                grad_acc_fn.register_hook(self._make_param_hook(param, self.bucket_manager))
                 self.grad_accs.append(grad_acc_fn)
 
     def _make_param_hook(self, param, bucket_manager):

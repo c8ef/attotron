@@ -65,10 +65,7 @@ def train_step(model, dataloader, device):
         batch_size, seq_len = input_ids.shape
         target_ids = target_ids.reshape(-1)
         outputs = outputs.view(batch_size * seq_len, -1)
-        loss = (
-            F.cross_entropy(outputs, target_ids, reduction="mean")
-            / dataloader.grad_acc_steps
-        )
+        loss = F.cross_entropy(outputs, target_ids, reduction="mean") / dataloader.grad_acc_steps
 
         loss.backward()
         acc_loss += loss.item()
@@ -84,9 +81,7 @@ if __name__ == "__main__":
     parser.add_argument("--tokenizers_parallelism", type=str, default="false")
 
     # Model arguments
-    parser.add_argument(
-        "--model_name", type=str, default="HuggingFaceTB/SmolLM-360M-Instruct"
-    )
+    parser.add_argument("--model_name", type=str, default="HuggingFaceTB/SmolLM-360M-Instruct")
     parser.add_argument("--num_hidden_layers", type=int, default=32)
     parser.add_argument("--num_attention_heads", type=int, default=16)
     parser.add_argument("--num_key_value_heads", type=int, default=4)
@@ -108,9 +103,7 @@ if __name__ == "__main__":
     parser.add_argument("--dp_size", type=int, default=1, help="Data parallel size")
     parser.add_argument("--tp_size", type=int, default=1, help="Tensor parallel size")
     parser.add_argument("--pp_size", type=int, default=1, help="Pipeline parallel size")
-    parser.add_argument(
-        "--pp_engine", type=str, default="afab", choices=["afab", "1f1b"]
-    )
+    parser.add_argument("--pp_engine", type=str, default="afab", choices=["afab", "1f1b"])
 
     # Logging arguments
     parser.add_argument("--use_wandb", action="store_true")
@@ -141,9 +134,7 @@ if __name__ == "__main__":
     setup_pgm(args.dp_size, args.tp_size, args.pp_size)
     set_all_seed(args.seed)
 
-    is_log_rank = (
-        pgm.pgm.tp_rank == 0 and pgm.pgm.dp_rank == 0 and pgm.pgm.pp_is_last_stage
-    )
+    is_log_rank = pgm.pgm.tp_rank == 0 and pgm.pgm.dp_rank == 0 and pgm.pgm.pp_is_last_stage
     if is_log_rank and args.use_wandb:
         wandb.init(
             project="attotron",
@@ -218,13 +209,9 @@ if __name__ == "__main__":
 
         if pgm.pgm.pp_world_size > 1:
             if args.pp_engine == "afab":
-                loss = train_step_pipeline_afab(
-                    model, dataloader, tensor_shapes, device, dtype
-                )
+                loss = train_step_pipeline_afab(model, dataloader, tensor_shapes, device, dtype)
             elif args.pp_engine == "1f1b":
-                loss = train_step_pipeline_1f1b(
-                    model, dataloader, tensor_shapes, device, dtype
-                )
+                loss = train_step_pipeline_1f1b(model, dataloader, tensor_shapes, device, dtype)
             else:
                 raise ValueError(f"Invalid pipeline parallel engine: {args.pp_engine}")
         else:
@@ -250,13 +237,15 @@ if __name__ == "__main__":
             is_print_rank=is_log_rank,
         )
         if is_log_rank and args.use_wandb:
-            wandb.log({
-                "loss": loss,
-                "tokens_per_step": tokens_per_step,
-                "tokens_per_second": tokens_per_step / step_duration,
-                "memory_usage": torch.cuda.memory_reserved() / 1e9,
-                "trained_tokens": trained_tokens,
-            })
+            wandb.log(
+                {
+                    "loss": loss,
+                    "tokens_per_step": tokens_per_step,
+                    "tokens_per_second": tokens_per_step / step_duration,
+                    "memory_usage": torch.cuda.memory_reserved() / 1e9,
+                    "trained_tokens": trained_tokens,
+                }
+            )
 
     if is_log_rank and args.use_wandb:
         wandb.finish()

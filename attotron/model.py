@@ -14,10 +14,7 @@ def get_cos_sin(seq_len, head_dim, base=500000.0):
     device = "cuda"
 
     inv_freq = 1.0 / (
-        base
-        ** (
-            torch.arange(0, head_dim, 2, dtype=torch.int64).float().to("cpu") / head_dim
-        )
+        base ** (torch.arange(0, head_dim, 2, dtype=torch.int64).float().to("cpu") / head_dim)
     )
     inv_freq = inv_freq.to(device)
     position = torch.arange(seq_len).to(device).unsqueeze(1).float()
@@ -59,15 +56,9 @@ class Attention(nn.Module):
         self.num_local_heads = config.num_attention_heads // pgm.pgm.tp_world_size
         self.num_local_kv_heads = config.num_key_value_heads // pgm.pgm.tp_world_size
 
-        self.q_proj = nn.Linear(
-            config.hidden_size, self.num_heads * self.head_dim, bias=False
-        )
-        self.k_proj = nn.Linear(
-            config.hidden_size, self.num_key_values * self.head_dim, bias=False
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size, self.num_key_values * self.head_dim, bias=False
-        )
+        self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
+        self.k_proj = nn.Linear(config.hidden_size, self.num_key_values * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(config.hidden_size, self.num_key_values * self.head_dim, bias=False)
         self.out_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
 
     def forward(self, x, cos, sin):
@@ -93,15 +84,9 @@ class Attention(nn.Module):
 class MLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.up_proj = nn.Linear(
-            config.hidden_size, config.intermediate_size, bias=False
-        )
-        self.gate_proj = nn.Linear(
-            config.hidden_size, config.intermediate_size, bias=False
-        )
-        self.down_proj = nn.Linear(
-            config.intermediate_size, config.hidden_size, bias=False
-        )
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
+        self.gate_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
 
     def forward(self, x):
         return self.down_proj(F.silu(self.gate_proj(x)) * self.up_proj(x))
@@ -111,16 +96,12 @@ class DecoderLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.input_layernorm = FlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = FlashRMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
+        self.post_attention_layernorm = FlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.attention = Attention(config)
         self.mlp = MLP(config)
 
         head_dim = config.hidden_size // config.num_attention_heads
-        self.cos, self.sin = get_cos_sin(
-            config.max_position_embeddings, head_dim=head_dim
-        )
+        self.cos, self.sin = get_cos_sin(config.max_position_embeddings, head_dim=head_dim)
 
     def forward(self, x):
         x = x + self.attention(self.input_layernorm(x), self.cos, self.sin)
@@ -147,9 +128,7 @@ class Llama(nn.Module):
 
         # modules
         self.embedding = nn.Embedding(self.vocab_size, self.hidden_size)
-        self.decoder_layers = nn.ModuleList([
-            DecoderLayer(config) for _ in range(self.num_layers)
-        ])
+        self.decoder_layers = nn.ModuleList([DecoderLayer(config) for _ in range(self.num_layers)])
         self.final_norm = FlashRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.final_proj = nn.Linear(self.hidden_size, self.vocab_size, bias=False)
 
