@@ -1,11 +1,13 @@
+import os
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from flash_attn.flash_attn_interface import flash_attn_func
 from flash_attn.layers.rotary import apply_rotary_emb
-from flash_attn.ops.triton.layer_norm import layer_norm_fn
 
 from attotron import pgm
+from attotron.nn.norm import FlashRMSNorm, LlamaRMSNorm
 
 
 def get_cos_sin(seq_len, head_dim, base=500000.0):
@@ -22,22 +24,6 @@ def get_cos_sin(seq_len, head_dim, base=500000.0):
         torch.cos(position.float() * inv_freq.float()).to(dtype),
         torch.sin(position.float() * inv_freq.float()).to(dtype),
     )
-
-
-class FlashRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-5):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.eps = eps
-
-    def forward(self, hidden_states):
-        return layer_norm_fn(
-            hidden_states,
-            self.weight,
-            None,
-            eps=self.eps,
-            is_rms_norm=True,
-        )
 
 
 class Attention(nn.Module):
@@ -95,8 +81,10 @@ class MLP(nn.Module):
 class DecoderLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.input_layernorm = FlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = FlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        RMSNorm = LlamaRMSNorm if os.getenv("FLASH_ATTN", "1") != "1" else FlashRMSNorm
+
+        self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.attention = Attention(config)
         self.mlp = MLP(config)
 
@@ -112,6 +100,7 @@ class DecoderLayer(nn.Module):
 class Llama(nn.Module):
     def __init__(self, config):
         super().__init__()
+        RMSNorm = LlamaRMSNorm if os.getenv("FLASH_ATTN", "1") != "1" else FlashRMSNorm
         # sanity check
         assert config.hidden_size % config.num_attention_heads == 0
         assert config.num_attention_heads % config.num_key_value_heads == 0
@@ -129,7 +118,7 @@ class Llama(nn.Module):
         # modules
         self.embedding = nn.Embedding(self.vocab_size, self.hidden_size)
         self.decoder_layers = nn.ModuleList([DecoderLayer(config) for _ in range(self.num_layers)])
-        self.final_norm = FlashRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.final_norm = RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.final_proj = nn.Linear(self.hidden_size, self.vocab_size, bias=False)
 
     def forward(self, input_ids):

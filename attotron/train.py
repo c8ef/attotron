@@ -28,7 +28,7 @@ from transformers import AutoConfig
 from attotron import pgm
 from attotron.data_parallel import DataParallelBucket
 from attotron.dataloader import MicroBatchDataLoader
-from attotron.model import Llama
+from attotron.nn.model import Llama
 from attotron.pgm import setup_pgm
 from attotron.pipeline_parallel import (
     PipelineParallel,
