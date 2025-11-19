@@ -1,6 +1,5 @@
 import os
 
-import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from flash_attn.flash_attn_interface import flash_attn_func
@@ -8,22 +7,7 @@ from flash_attn.layers.rotary import apply_rotary_emb
 
 from attotron import pgm
 from attotron.nn.norm import FlashRMSNorm, LlamaRMSNorm
-
-
-def get_cos_sin(seq_len, head_dim, base=500000.0):
-    assert head_dim % 2 == 0
-    dtype = torch.bfloat16
-    device = "cuda"
-
-    inv_freq = 1.0 / (
-        base ** (torch.arange(0, head_dim, 2, dtype=torch.int64).float().to("cpu") / head_dim)
-    )
-    inv_freq = inv_freq.to(device)
-    position = torch.arange(seq_len).to(device).unsqueeze(1).float()
-    return (
-        torch.cos(position.float() * inv_freq.float()).to(dtype),
-        torch.sin(position.float() * inv_freq.float()).to(dtype),
-    )
+from attotron.nn.rope import get_cos_sin, llama_rotary_emb
 
 
 class Attention(nn.Module):
@@ -56,8 +40,13 @@ class Attention(nn.Module):
         k = k.view(batch_size, seq_len, self.num_local_kv_heads, self.head_dim)
         v = v.view(batch_size, seq_len, self.num_local_kv_heads, self.head_dim)
 
-        q = apply_rotary_emb(q, cos, sin)
-        k = apply_rotary_emb(k, cos, sin)
+        if os.getenv("FLASH_ATTN", "1") != "1":
+            q = llama_rotary_emb(q, cos, sin)
+            k = llama_rotary_emb(q, cos, sin)
+        else:
+            q = apply_rotary_emb(q, cos[:, : self.head_dim // 2], sin[:, : self.head_dim // 2])
+            k = apply_rotary_emb(k, cos[:, : self.head_dim // 2], sin[:, : self.head_dim // 2])
+
         k = k.repeat_interleave(self.num_local_heads // self.num_local_kv_heads, dim=2)
         v = v.repeat_interleave(self.num_local_heads // self.num_local_kv_heads, dim=2)
 
