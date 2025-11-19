@@ -15,7 +15,7 @@ def test_norm():
     x = torch.randn(batch_size, seq_len, hidden_size, dtype=torch.float32).cuda()
     out_flash = flash_norm(x)
     out_llama = llama_norm(x)
-    assert torch.allclose(out_flash, out_llama)
+    torch.testing.assert_close(out_flash, out_llama)
 
 
 if __name__ == "__main__":
