@@ -10,7 +10,7 @@ def test_rope():
     num_heads = 4
     head_dim = 16
 
-    x = torch.randn(batch_size, seq_len, num_heads, head_dim, dtype=torch.float32).cuda()
+    x = torch.randn(batch_size, seq_len, num_heads, head_dim, dtype=torch.bfloat16).cuda()
     cos, sin = get_cos_sin(seq_len, head_dim)
     out_flash = apply_rotary_emb(x, cos[:, : head_dim // 2], sin[:, : head_dim // 2])
     out_llama = llama_rotary_emb(x, cos, sin)

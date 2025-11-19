@@ -42,7 +42,7 @@ class Attention(nn.Module):
 
         if os.getenv("FLASH_ATTN", "1") != "1":
             q = llama_rotary_emb(q, cos, sin)
-            k = llama_rotary_emb(q, cos, sin)
+            k = llama_rotary_emb(k, cos, sin)
         else:
             q = apply_rotary_emb(q, cos[:, : self.head_dim // 2], sin[:, : self.head_dim // 2])
             k = apply_rotary_emb(k, cos[:, : self.head_dim // 2], sin[:, : self.head_dim // 2])
