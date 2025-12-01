@@ -58,8 +58,41 @@ class Gather(torch.autograd.Function):
         return chunks[pgm.pgm.tp_rank]
 
 
+class LinearWithAsyncAllReduce(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, input, weight, bias):
+        ctx.save_for_backward(input, weight)
+        ctx.use_bias = bias is not None
+        output = input @ weight.t() + bias if ctx.use_bias else input @ weight.t()
+        return output
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        input, weight = ctx.saved_tensors
+        grad_input = grad_output @ weight
+        handle = dist.all_reduce(grad_input, group=pgm.pgm.tp_group, async_op=True)
+        grad_output, input = (
+            grad_output.contiguous().view(-1, *grad_output.shape[2:]),
+            input.contiguous().view(-1, *input.shape[2:]),
+        )
+        grad_weight = grad_output.t() @ input
+        grad_bias = grad_output.sum(0) if ctx.use_bias else None
+        handle.wait()
+        return grad_input, grad_weight, grad_bias
+
+
+def linear_with_all_reduce(input, weight, bias):
+    input_parallel = Copy.apply(input)
+    output = F.linear(input_parallel, weight, bias)
+    return output
+
+
+def linear_with_async_all_reduce(input, weight, bias):
+    return LinearWithAsyncAllReduce.apply(input, weight, bias)
+
+
 class ColumnParallelLinear(nn.Module):
-    def __init__(self, in_features, out_features, bias, gather_output=False):
+    def __init__(self, in_features, out_features, bias, gather_output=False, async_all_reduce=True):
         super().__init__()
         self.tp_world_size = pgm.pgm.tp_world_size
         self.tp_rank = pgm.pgm.tp_rank
@@ -70,6 +103,7 @@ class ColumnParallelLinear(nn.Module):
         )
         self.output_size_per_partition = out_features // self.tp_world_size
         self.gather_output = gather_output
+        self.async_all_reduce = async_all_reduce
 
         self.weight = nn.Parameter(torch.Tensor(self.output_size_per_partition, self.in_features))
         if bias:
@@ -100,8 +134,10 @@ class ColumnParallelLinear(nn.Module):
         self.weight.data = weight_list[self.tp_rank].contiguous()
 
     def forward(self, input):
-        input_parallel = Copy.apply(input)
-        output = F.linear(input_parallel, self.weight, self.bias)
+        if self.async_all_reduce:
+            output = linear_with_async_all_reduce(input, self.weight, self.bias)
+        else:
+            output = linear_with_all_reduce(input, self.weight, self.bias)
         if self.gather_output:
             output = Gather.apply(output)
         return output
