@@ -84,8 +84,8 @@ class PGM:
         )
 
         self.cp_world_size = dist.get_world_size(self.cp_group)
-        self.cp_send_rank = self.cp_group_ids[(self.cp_rank + 1) % self.cp_world_size]
-        self.cp_recv_rank = self.cp_group_ids[(self.cp_rank - 1) % self.cp_world_size]
+        self.cp_send_rank = self.cp_group_ids[(self.cp_rank + 1) % self.cp_world_size].item()
+        self.cp_recv_rank = self.cp_group_ids[(self.cp_rank - 1) % self.cp_world_size].item()
 
     def __str__(self):
         return (
