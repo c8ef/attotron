@@ -6,6 +6,7 @@ from flash_attn.flash_attn_interface import flash_attn_func
 from flash_attn.layers.rotary import apply_rotary_emb
 
 from attotron import pgm
+from attotron.context_parallel import ring_attention, update_rope_for_context_parallel
 from attotron.nn.norm import FlashRMSNorm, LlamaRMSNorm
 from attotron.nn.rope import get_cos_sin, llama_rotary_emb
 
@@ -50,7 +51,13 @@ class Attention(nn.Module):
         k = k.repeat_interleave(self.num_local_heads // self.num_local_kv_heads, dim=2)
         v = v.repeat_interleave(self.num_local_heads // self.num_local_kv_heads, dim=2)
 
-        out = flash_attn_func(q, k, v, causal=True)
+        if os.getenv("CONTEXT_PARALLEL", "0") == "1":
+            sm_scale = 1.0 / (q.size(-1) ** 0.5)
+            out = ring_attention(
+                q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2), sm_scale, True
+            ).transpose(1, 2)
+        else:
+            out = flash_attn_func(q, k, v, causal=True)
         out = out.reshape(batch_size, seq_len, self.num_local_heads * self.head_dim)
         out = self.out_proj(out)
         return out
@@ -79,6 +86,7 @@ class DecoderLayer(nn.Module):
 
         head_dim = config.hidden_size // config.num_attention_heads
         self.cos, self.sin = get_cos_sin(config.max_position_embeddings, head_dim=head_dim)
+        self.cos, self.sin = update_rope_for_context_parallel(self.cos, self.sin)
 
     def forward(self, x):
         x = x + self.attention(self.input_layernorm(x), self.cos, self.sin)

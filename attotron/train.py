@@ -26,6 +26,7 @@ from torch.optim import AdamW
 from transformers import AutoConfig
 
 from attotron import pgm
+from attotron.context_parallel import apply_context_parallel
 from attotron.data_parallel import DataParallelBucket
 from attotron.dataloader import MicroBatchDataLoader
 from attotron.nn.model import Llama
@@ -103,6 +104,7 @@ if __name__ == "__main__":
     parser.add_argument("--dp_size", type=int, default=1, help="Data parallel size")
     parser.add_argument("--tp_size", type=int, default=1, help="Tensor parallel size")
     parser.add_argument("--pp_size", type=int, default=1, help="Pipeline parallel size")
+    parser.add_argument("--cp_size", type=int, default=1, help="Context parallel size")
     parser.add_argument("--pp_engine", type=str, default="afab", choices=["afab", "1f1b"])
 
     # Logging arguments
@@ -131,10 +133,15 @@ if __name__ == "__main__":
         init_method="env://",
         timeout=datetime.timedelta(minutes=2),
     )
-    setup_pgm(args.dp_size, args.tp_size, args.pp_size)
+    setup_pgm(args.dp_size, args.tp_size, args.pp_size, args.cp_size)
     set_all_seed(args.seed)
 
-    is_log_rank = pgm.pgm.tp_rank == 0 and pgm.pgm.dp_rank == 0 and pgm.pgm.pp_is_last_stage
+    is_log_rank = (
+        pgm.pgm.tp_rank == 0
+        and pgm.pgm.dp_rank == 0
+        and pgm.pgm.pp_is_last_stage
+        and pgm.pgm.cp_rank == 0
+    )
     if is_log_rank and args.use_wandb:
         wandb.init(
             project="attotron",
@@ -162,6 +169,9 @@ if __name__ == "__main__":
 
     if pgm.pgm.pp_world_size > 1:
         model = PipelineParallel(model, model_config)
+
+    if pgm.pgm.cp_world_size > 1:
+        model = apply_context_parallel(model)
 
     model.to(dtype).to(device)
 
