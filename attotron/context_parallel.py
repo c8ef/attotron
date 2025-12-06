@@ -53,7 +53,7 @@ def ring_attention_forward(q, k, v, sm_scale, is_causal):
     b, h, s, _ = q.shape
     S = torch.matmul(q, k.transpose(-2, -1)) * sm_scale
     if is_causal:
-        causal_mask = torch.tril(torch.ones(s, s, device=q.device, dtype=torch.bool), diagonal=1)
+        causal_mask = torch.triu(torch.ones(s, s, device=q.device, dtype=torch.bool), diagonal=1)
         causal_mask = causal_mask.unsqueeze(0).unsqueeze(1).expand(b, h, s, s)
         S.masked_fill_(causal_mask, float("-inf"))
     S_max = torch.max(S, dim=-1, keepdim=True)[0]
@@ -69,7 +69,7 @@ def ring_attention_backward(dO, Q, K, V, O, softmax_lse, sm_scale, is_causal):
     b, h, s, _ = Q.shape
     S = torch.matmul(Q, K.transpose(-2, -1)) * sm_scale
     if is_causal:
-        causal_mask = torch.tril(torch.ones(s, s, device=Q.device, dtype=torch.bool), diagonal=1)
+        causal_mask = torch.triu(torch.ones(s, s, device=Q.device, dtype=torch.bool), diagonal=1)
         causal_mask = causal_mask.unsqueeze(0).unsqueeze(1).expand(b, h, s, s)
         S.masked_fill_(causal_mask, float("-inf"))
     P = torch.exp(S - softmax_lse.unsqueeze(-1))
