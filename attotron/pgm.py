@@ -97,6 +97,6 @@ class PGM:
         )
 
 
-def setup_pgm(dp_size, tp_size, pp_size):
+def setup_pgm(dp_size, tp_size, pp_size, cp_size):
     global pgm
-    pgm = PGM(dp_size, tp_size, pp_size)
+    pgm = PGM(dp_size, tp_size, pp_size, cp_size)
