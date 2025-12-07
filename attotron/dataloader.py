@@ -27,6 +27,7 @@ class MicroBatchDataLoader(DataLoader):
         self.micro_batch_size = micro_batch_size
         self.grad_acc_steps = grad_acc_steps
         self.global_batch_size = micro_batch_size * grad_acc_steps * pgm.pgm.dp_world_size
+        self.seq_len_per_gpu = seq_len // pgm.pgm.cp_world_size
 
         self.dataset = load_dataset(dataset_name, split=split)
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
@@ -91,8 +92,10 @@ class MicroBatchDataLoader(DataLoader):
 
     def collate_batch(self, batch):
         batch_input_ids = torch.stack([torch.tensor(item["input_ids"]) for item in batch])
-        input_ids = batch_input_ids[:, :-1].contiguous()
-        target_ids = batch_input_ids[:, 1:].contiguous()
+        start_idx = pgm.pgm.cp_rank * self.seq_len_per_gpu
+        end_idx = start_idx + self.seq_len_per_gpu
+        input_ids = batch_input_ids[:, start_idx:end_idx].contiguous()
+        target_ids = batch_input_ids[:, start_idx + 1 : end_idx + 1].contiguous()
         return {"input_ids": input_ids, "target_ids": target_ids}
 
     def __iter__(self):
